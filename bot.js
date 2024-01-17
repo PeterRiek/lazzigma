@@ -25,23 +25,19 @@ var timeBuf = 500
 var targetUserId = defaultTarget
 
 client.on('ready', () => {
-    console.log(client.user.username)
+    console.log(`Online as ${client.user.username}`)
+    client.user.setStatus('invisible');
 })
 
 client.on('voiceStateUpdate', (oldState, newState) => {
     if (oldState.member.user.id != targetUserId) return;
     if (newState.channelId === null) {
-        // console.log('user left channel', newState.channelId)
         const connection = getVoiceConnection(oldState.guild.id)
         if (connection) connection.destroy()
     } else if (oldState.channelId === null) {
-        // console.log('user joined channel', newState.channelId)
         joinFor(newState.guild, newState.member.user.id)
     } else {
-        // console.log('user moved channels', oldState.channelId, newState.channelId)
-        console.log(oldState)
-        console.log(newState)
-        joinFor(newState.guild, newState.m6ember.user.id)
+        joinFor(newState.guild, newState.member.user.id)
     }
 });
 
@@ -73,6 +69,7 @@ function joinFor(guild, userId) {
         
     })
     connection.receiver.speaking.on('end', (_userId) => {
+        if (_userId != targetUserId) return
         timeStop = (new Date()).getTime() + timeBuf
         setTimeout(() => {
 
@@ -131,6 +128,18 @@ client.on('messageCreate', async (message) => {
         if (connection) {
             connection.destroy()
         }
+    }
+
+    if (args[0] == 'listall') {
+        const guild = message.guild;
+
+        // Fetch all members in the guild
+        await guild.members.fetch();
+
+        // Iterate over the members and log their username and ID
+        guild.members.cache.forEach((member) => {
+            console.log(`Username: ${member.user.tag}, ID: ${member.user.id}`);
+        });
     }
 })
 
