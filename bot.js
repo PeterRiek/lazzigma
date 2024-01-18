@@ -14,15 +14,16 @@ const client = new Client({
     ],
 })
 
-const { token, defaultTarget } = require('./config.json')
+const { token, defaultTarget, defaultSfx } = require('./config.json')
 const { measureMemory } = require('vm')
 const { userInfo } = require('os')
 const audioPlayer = createAudioPlayer()
 
 var running = false
 var timeStop = 0
-var timeBuf = 500
+// var timeBuf = 500
 var targetUserId = defaultTarget
+var sound = defaultSfx
 
 client.on('ready', () => {
     console.log(`Online as ${client.user.username}`)
@@ -45,40 +46,44 @@ function joinFor(guild, userId) {
     const voiceChannel = guild.members.cache.get(userId)
 
     if (!voiceChannel) return
+    try {
+        const connection = joinVoiceChannel({
+            channelId: voiceChannel.voice.channel.id,
+            guildId: guild.id,
+            adapterCreator: guild.voiceAdapterCreator,
+        })
+        connection.receiver.speaking.on('start', (_userId) => {
+            if (_userId != targetUserId) return
+            if (!running || audioPlayer.state.status == 'idle') {
+                running = true
+                const resource = createAudioResource(`sfx/${sound}.mp3`)
 
-    const connection = joinVoiceChannel({
-        channelId: voiceChannel.voice.channel.id,
-        guildId: guild.id,
-        adapterCreator: guild.voiceAdapterCreator,
-    })
-    connection.receiver.speaking.on('start', (_userId) => {
-        if (_userId != targetUserId) return
-        if (!running) {
-            running = true
-            const resource = createAudioResource('sfx/bmth.mp3')
+                audioPlayer.play(resource)
 
-            audioPlayer.play(resource)
-
-            audioPlayer.on('error', error => {
-                console.error(`Error: ${error.message} with resource ${error.resource.metadata.title}`)
-                audioPlayer.play(getNextResource())
-            })
-        } else {
-            audioPlayer.unpause()
-        }
-        
-    })
-    connection.receiver.speaking.on('end', (_userId) => {
-        if (_userId != targetUserId) return
-        timeStop = (new Date()).getTime() + timeBuf
-        setTimeout(() => {
-
-            if (timeStop <= (new Date()).getTime()) {
-                audioPlayer.pause()
+                audioPlayer.on('error', error => {
+                    console.error(`Error: ${error.message} with resource ${error.resource.metadata.title}`)
+                    audioPlayer.play(getNextResource())
+                })
+            } else {
+                audioPlayer.unpause()
             }
-        }, timeBuf)
-    })
-    connection.subscribe(audioPlayer)
+            
+        })
+        connection.receiver.speaking.on('end', (_userId) => {
+            if (_userId != targetUserId) return
+            audioPlayer.pause()
+            // timeStop = (new Date()).getTime() + timeBuf
+            // setTimeout(() => {
+
+            //     if (timeStop <= (new Date()).getTime()) {
+            //         audioPlayer.pause()
+            //     }
+            // }, timeBuf)
+        })
+        connection.subscribe(audioPlayer)
+    } catch (e) {
+        console.error(e);
+    }
 
 }
 
@@ -96,8 +101,17 @@ client.on('messageCreate', async (message) => {
         message.reply('Target set.')
     }
 
+    if (args[0] == 'sfx') {
+        if (args.length < 2) return;
+        sound = args[1];
+        message.reply('Sound set.')
+    }
+
     if (args[0] == 'whoami') {
         message.reply(message.author.id)
+    }
+    if (args[0] == 'status') {
+        message.reply(audioPlayer.state)
     }
 
     if (args[0] === 'play') {
@@ -107,7 +121,7 @@ client.on('messageCreate', async (message) => {
             return message.reply('I must be in a voice channel before you can play music!')
         }
 
-        const resource = createAudioResource('sfx/bmth.mp3')
+        const resource = createAudioResource(`sfx/${sound}.mp3`)
 
         audioPlayer.play(resource)
 
